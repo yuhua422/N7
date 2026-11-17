@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌟 快樂課堂分組與計分看板</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome 圖示庫 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入 Google Fonts 圓體字型，適合國小低年級閱讀 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background-color: #FFFDF7;
+            background-image: radial-gradient(#F3E8D2 1.5px, transparent 1.5px);
+            background-size: 24px 24px;
+            user-select: none;
+        }
+
+        /* 數字等寬顯示，避免分數跳動時排版晃動 */
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 彈跳與浮動動畫 */
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-4px) rotate(3deg); }
+        }
+        .crown-float {
+            animation: floatSlow 2s ease-in-out infinite;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            70% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .card-pop {
+            animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes scoreBump {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.35); color: #EA580C; }
+            100% { transform: scale(1); }
+        }
+        .score-bump {
+            animation: scoreBump 0.3s ease-out;
+        }
+
+        @keyframes shufflePulse {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(0.96) rotate(-1.5deg); }
+            75% { transform: scale(1.02) rotate(1.5deg); }
+        }
+        .shuffling-card {
+            animation: shufflePulse 0.18s infinite;
+        }
+
+        /* 漂浮加分數字特效 */
+        @keyframes floatUpFade {
+            0% { transform: translateY(0) scale(0.8); opacity: 1; }
+            100% { transform: translateY(-38px) scale(1.2); opacity: 0; }
+        }
+        .floating-delta {
+            position: absolute;
+            pointer-events: none;
+            font-weight: 900;
+            font-size: 1.5rem;
+            animation: floatUpFade 0.75s ease-out forwards;
+            z-index: 30;
+            text-shadow: 0 2px 4px rgba(255,255,255,0.9);
+        }
+
+        /* 自訂捲軸美化 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #FEF3C7;
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #F59E0B;
+            border-radius: 999px;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 頂部導覽與快捷操作列 -->
+    <header class="bg-white/90 backdrop-blur-md border-b-4 border-amber-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+            <!-- 標題區 -->
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-300 to-orange-400 flex items-center justify-center text-white text-2xl shadow-md border-2 border-white">
+                    <i class="fa-solid fa-star"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-black tracking-wide text-slate-800 flex items-center gap-2">
+                        快樂課堂分組與計分板
+                        <span id="total-student-badge" class="hidden sm:inline-block text-xs sm:text-sm font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full border border-amber-300">
+                            共 0 位小朋友
+                        </span>
+                    </h1>
+                    <p class="text-xs sm:text-sm text-slate-500 font-medium hidden md:block">
+                        💡 小提示：點擊任意兩個「座號圓圈」可以互相交換組別喔！
+                    </p>
+                </div>
+            </div>
+
+            <!-- 頂部功能按鈕群 -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- 全班加分快捷按鈕 -->
+                <button onclick="addAllGroupsScore(1)" class="px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-sm sm:text-base shadow-sm active:scale-95 transition flex items-center gap-1.5 border-b-4 border-teal-700">
+                    <i class="fa-solid fa-hands-clapping"></i>
+                    <span>全班 +1 分</span>
+                </button>
+
+                <!-- 音效開關 -->
+                <button id="sound-toggle-btn" onclick="toggleSound()" class="px-3.5 py-2.5 rounded-2xl bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-sm sm:text-base transition active:scale-95 flex items-center gap-1.5 border-2 border-sky-300" title="切換計分音效">
+                    <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+                    <span class="hidden sm:inline">音效開</span>
+                </button>
+
+                <!-- 分數歸零按鈕 -->
+                <button onclick="confirmAction('resetScores')" class="px-3.5 py-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-sm sm:text-base transition active:scale-95 flex items-center gap-1.5 border-2 border-amber-300" title="保留分組，將所有分數歸零">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span class="hidden md:inline">分數歸零</span>
+                </button>
+
+                <!-- 隱藏/展開設定區 (投影模式) -->
+                <button id="toggle-settings-btn" onclick="toggleSettingsPanel()" class="px-4 py-2.5 rounded-2xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm sm:text-base shadow-sm active:scale-95 transition flex items-center gap-1.5 border-b-4 border-indigo-700">
+                    <i id="settings-toggle-icon" class="fa-solid fa-eye-slash"></i>
+                    <span id="settings-toggle-text">投影模式 (隱藏設定)</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主內容區 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-6">
+
+        <!-- 1. 分組設定面板 (可折疊隱藏以最大化投影空間) -->
+        <section id="settings-panel" class="bg-white rounded-3xl p-4 sm:p-6 shadow-md border-4 border-pink-200 transition-all duration-300">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b-2 border-dashed border-pink-100">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-9 h-9 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center text-lg font-bold">
+                        <i class="fa-solid fa-sliders"></i>
+                    </span>
+                    <h2 class="text-lg sm:text-xl font-black text-slate-800">分組設定與抽籤區</h2>
+                </div>
+                <div id="preview-summary" class="text-sm sm:text-base font-bold text-pink-700 bg-pink-50 px-4 py-1.5 rounded-2xl border border-pink-200">
+                    預計分成 5 組，每組 4 人
+                </div>
+            </div>
+
+            <!-- 設定表單網格 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+                <!-- 座號範圍設定 -->
+                <div class="bg-rose-50/70 p-4 rounded-2xl border-2 border-rose-200 flex flex-col justify-between">
+                    <label class="text-sm font-black text-rose-800 mb-2 flex items-center gap-1.5">
+                        <i class="fa-solid fa-list-ol"></i> 1. 班級座號範圍
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <span class="text-xs text-rose-600 font-bold block mb-1">起始號</span>
+                            <input type="number" id="start-num" min="1" max="99" value="1" oninput="updatePreviewSummary()"
+                                class="w-full text-center text-xl font-black bg-white border-2 border-rose-300 rounded-xl py-2 focus:outline-none focus:border-rose-500 text-slate-800">
+                        </div>
+                        <span class="text-xl font-black text-rose-400 pt-5">～</span>
+                        <div class="flex-1">
+                            <span class="text-xs text-rose-600 font-bold block mb-1">結束號</span>
+                            <input type="number" id="end-num" min="1" max="99" value="20" oninput="updatePreviewSummary()"
+                                class="w-full text-center text-xl font-black bg-white border-2 border-rose-300 rounded-xl py-2 focus:outline-none focus:border-rose-500 text-slate-800">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 每組人數設定 -->
+                <div class="bg-sky-50/70 p-4 rounded-2xl border-2 border-sky-200 flex flex-col justify-between">
+                    <label class="text-sm font-black text-sky-800 mb-2 flex items-center gap-1.5">
+                        <i class="fa-solid fa-users"></i> 2. 每幾個人一組
+                    </label>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="adjustGroupSize(-1)" class="w-11 h-11 rounded-xl bg-sky-200 hover:bg-sky-300 text-sky-900 font-black text-xl active:scale-95 transition">-</button>
+                            <input type="number" id="group-size" min="1" max="30" value="4" oninput="updatePreviewSummary()"
+                                class="w-full text-center text-2xl font-black bg-white border-2 border-sky-300 rounded-xl py-1.5 focus:outline-none focus:border-sky-500 text-slate-800">
+                            <button type="button" onclick="adjustGroupSize(1)" class="w-11 h-11 rounded-xl bg-sky-200 hover:bg-sky-300 text-sky-900 font-black text-xl active:scale-95 transition">+</button>
+                        </div>
+                        <span class="text-xs text-sky-700 font-bold block mt-1.5 text-center">人 / 每組</span>
+                    </div>
+                </div>
+
+                <!-- 剩餘人數分配方式 -->
+                <div class="bg-amber-50/70 p-4 rounded-2xl border-2 border-amber-200 flex flex-col justify-between">
+                    <label class="text-sm font-black text-amber-800 mb-2 flex items-center gap-1.5">
+                        <i class="fa-solid fa-scale-balanced"></i> 3. 餘數分配方式
+                    </label>
+                    <div class="flex flex-col gap-2">
+                        <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border-2 border-amber-200 cursor-pointer hover:bg-amber-50 transition">
+                            <input type="radio" name="remainder-mode" value="distribute" checked onchange="updatePreviewSummary()" class="w-4 h-4 accent-amber-500">
+                            <span class="text-sm font-bold text-slate-700">平均分配到各組</span>
+                        </label>
+                        <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border-2 border-amber-200 cursor-pointer hover:bg-amber-50 transition">
+                            <input type="radio" name="remainder-mode" value="separate" onchange="updatePreviewSummary()" class="w-4 h-4 accent-amber-500">
+                            <span class="text-sm font-bold text-slate-700">剩餘人數自成一組</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 排除缺席座號 -->
+                <div class="bg-purple-50/70 p-4 rounded-2xl border-2 border-purple-200 flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-black text-purple-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-user-slash"></i> 4. 排除缺席座號
+                        </label>
+                        <button type="button" onclick="openAbsentPicker()" class="text-xs font-bold bg-purple-200 hover:bg-purple-300 text-purple-900 px-2.5 py-1 rounded-lg transition">
+                            <i class="fa-solid fa-hand-pointer mr-1"></i>點選座號
+                        </button>
+                    </div>
+                    <div>
+                        <input type="text" id="absent-input" placeholder="例如: 3, 12 (選填)" oninput="updatePreviewSummary()"
+                            class="w-full text-base font-bold bg-white border-2 border-purple-300 rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 text-slate-800 placeholder:text-slate-400 placeholder:font-normal">
+                        <span class="text-xs text-purple-700 font-medium block mt-1.5">可用逗號或空白分隔號碼</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部操作大按鈕區 -->
+            <div class="mt-5 pt-4 border-t-2 border-pink-100 flex flex-wrap items-center justify-between gap-3">
+                <button type="button" onclick="confirmAction('resetAll')" class="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>重置全部設定</span>
+                </button>
+
+                <div class="flex flex-wrap items-center gap-3 ml-auto">
+                    <button type="button" id="shuffle-btn" onclick="startRandomGrouping()"
+                        class="px-7 py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-orange-400 hover:from-pink-600 hover:to-orange-500 text-white font-black text-lg sm:text-xl shadow-lg shadow-rose-200 active:scale-95 transition flex items-center gap-2.5 border-b-4 border-rose-700">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span id="shuffle-btn-text">開始隨機分組！</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 手動交換座號提示橫幅 (當老師點擊第一個座號時顯示) -->
+        <div id="swap-banner" class="hidden bg-amber-400 text-slate-900 px-5 py-3 rounded-2xl shadow-md border-2 border-amber-600 flex items-center justify-between animate-bounce">
+            <div class="flex items-center gap-2.5 font-black text-base sm:text-lg">
+                <i class="fa-solid fa-arrows-rotate text-xl"></i>
+                <span id="swap-banner-text">已選取 5 號，請點擊另一位小朋友的座號來交換位置！</span>
+            </div>
+            <button onclick="cancelSwapSelection()" class="px-3 py-1 bg-white/90 hover:bg-white rounded-xl text-sm font-bold text-slate-800 shadow-sm">
+                取消選取
+            </button>
+        </div>
+
+        <!-- 2. 分組顯示與計分看板網格 -->
+        <section id="groups-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-8">
+            <!-- 組別卡片將由 JavaScript 動態生成 -->
+        </section>
+
+    </main>
+
+    <!-- 缺席座號點選彈窗 (Modal) -->
+    <div id="absent-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border-4 border-purple-300 card-pop">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-black text-purple-900 flex items-center gap-2">
+                    <i class="fa-solid fa-user-check"></i> 點選今天請假 / 缺席的座號
+                </h3>
+                <button onclick="closeAbsentPicker()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <p class="text-sm text-slate-500 font-medium mb-4">紅色代表「缺席（不參與分組）」，點擊座號可切換狀態：</p>
+            <div id="absent-grid" class="grid grid-cols-5 sm:grid-cols-6 gap-2.5 max-h-64 overflow-y-auto p-2 bg-purple-50/50 rounded-2xl border border-purple-100">
+                <!-- 座號按鈕動態生成 -->
+            </div>
+            <div class="mt-5 flex justify-end gap-2">
+                <button onclick="clearAbsentSelection()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">
+                    全部出席
+                </button>
+                <button onclick="closeAbsentPicker()" class="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-base shadow">
+                    完成設定
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自訂確認對話框 (取代 alert/confirm) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-4 border-amber-300 text-center card-pop">
+            <div id="confirm-icon-box" class="w-16 h-16 rounded-full bg-amber-100 text-amber-500 mx-auto flex items-center justify-center text-3xl mb-4">
+                <i class="fa-solid fa-circle-question"></i>
+            </div>
+            <h3 id="confirm-title" class="text-2xl font-black text-slate-800 mb-2">確定要執行嗎？</h3>
+            <p id="confirm-desc" class="text-slate-600 font-medium mb-6">這個動作無法復原喔！</p>
+            <div class="flex items-center justify-center gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base transition">
+                    先不要
+                </button>
+                <button id="confirm-yes-btn" class="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-base shadow-md transition">
+                    確定執行
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮動提示訊息 (Toast) -->
+    <div id="toast-box" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-4">
+        <div class="bg-slate-800/95 text-white px-6 py-3 rounded-full shadow-xl font-bold text-base flex items-center gap-2.5 border-2 border-white/20">
+            <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400"></i>
+            <span id="toast-msg">提示訊息</span>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 馬卡龍色系與可愛動物主題庫
+        // ==========================================
+        const MACARON_THEMES = [
+            {
+                name: '草莓兔兔',
+                emoji: '🐰',
+                cardBg: 'bg-[#FFF0F3]',
+                border: 'border-[#FFCCD5]',
+                headerBg: 'bg-[#FFB3C1]',
+                headerText: 'text-[#800F2F]',
+                badgeBg: 'bg-white text-[#C9184A] border-[#FF8FA3]',
+                scoreBox: 'bg-white/90 border-[#FFB3C1]',
+                scoreText: 'text-[#C9184A]'
+            },
+            {
+                name: '晴空小熊',
+                emoji: '🐻',
+                cardBg: 'bg-[#EFF8FF]',
+                border: 'border-[#B9E2FF]',
+                headerBg: 'bg-[#90CDF4]',
+                headerText: 'text-[#1A365D]',
+                badgeBg: 'bg-white text-[#2B6CB0] border-[#63B3ED]',
+                scoreBox: 'bg-white/90 border-[#90CDF4]',
+                scoreText: 'text-[#2B6CB0]'
+            },
+            {
+                name: '檸檬小鴨',
+                emoji: '🐥',
+                cardBg: 'bg-[#FEFCE8]',
+                border: 'border-[#FDE047]',
+                headerBg: 'bg-[#FACC15]',
+                headerText: 'text-[#713F12]',
+                badgeBg: 'bg-white text-[#A16207] border-[#FDE047]',
+                scoreBox: 'bg-white/90 border-[#FACC15]',
+                scoreText: 'text-[#B45309]'
+            },
+            {
+                name: '薄荷青蛙',
+                emoji: '🐸',
+                cardBg: 'bg-[#ECFDF5]',
+                border: 'border-[#A7F3D0]',
+                headerBg: 'bg-[#6EE7B7]',
+                headerText: 'text-[#064E3B]',
+                badgeBg: 'bg-white text-[#047857] border-[#34D399]',
+                scoreBox: 'bg-white/90 border-[#6EE7B7]',
+                scoreText: 'text-[#047857]'
+            },
+            {
+                name: '葡萄貓咪',
+                emoji: '🐱',
+                cardBg: 'bg-[#F5F3FF]',
+                border: 'border-[#DDD6FE]',
+                headerBg: 'bg-[#C4B5FD]',
+                headerText: 'text-[#4C1D95]',
+                badgeBg: 'bg-white text-[#6D28D9] border-[#A78BFA]',
+                scoreBox: 'bg-white/90 border-[#C4B5FD]',
+                scoreText: 'text-[#6D28D9]'
+            },
+            {
+                name: '蜜桃狐狸',
+                emoji: '🦊',
+                cardBg: 'bg-[#FFF7ED]',
+                border: 'border-[#FED7AA]',
+                headerBg: 'bg-[#FDBA74]',
+                headerText: 'text-[#7C2D12]',
+                badgeBg: 'bg-white text-[#C2410C] border-[#FB923C]',
+                scoreBox: 'bg-white/90 border-[#FDBA74]',
+                scoreText: 'text-[#C2410C]'
+            },
+            {
+                name: '蘇打海豚',
+                emoji: '🐬',
+                cardBg: 'bg-[#ECFEFF]',
+                border: 'border-[#A5F3FC]',
+                headerBg: 'bg-[#67E8F9]',
+                headerText: 'text-[#164E63]',
+                badgeBg: 'bg-white text-[#0E7490] border-[#22D3EE]',
+                scoreBox: 'bg-white/90 border-[#67E8F9]',
+                scoreText: 'text-[#0E7490]'
+            },
+            {
+                name: '蘋果刺蝟',
+                emoji: '🦔',
+                cardBg: 'bg-[#FEF2F2]',
+                border: 'border-[#FECACA]',
+                headerBg: 'bg-[#FCA5A5]',
+                headerText: 'text-[#7F1D1D]',
+                badgeBg: 'bg-white text-[#B91C1C] border-[#F87171]',
+                scoreBox: 'bg-white/90 border-[#FCA5A5]',
+                scoreText: 'text-[#B91C1C]'
+            },
+            {
+                name: '抹茶無尾熊',
+                emoji: '🐨',
+                cardBg: 'bg-[#F7FEE7]',
+                border: 'border-[#D9F99D]',
+                headerBg: 'bg-[#BEF264]',
+                headerText: 'text-[#365314]',
+                badgeBg: 'bg-white text-[#4D7C0F] border-[#A3E635]',
+                scoreBox: 'bg-white/90 border-[#BEF264]',
+                scoreText: 'text-[#4D7C0F]'
+            },
+            {
+                name: '藍莓企鵝',
+                emoji: '🐧',
+                cardBg: 'bg-[#EEF2FF]',
+                border: 'border-[#C7D2FE]',
+                headerBg: 'bg-[#A5B4FC]',
+                headerText: 'text-[#312E81]',
+                badgeBg: 'bg-white text-[#4338CA] border-[#818CF8]',
+                scoreBox: 'bg-white/90 border-[#A5B4FC]',
+                scoreText: 'text-[#4338CA]'
+            }
+        ];
+
+        // ==========================================
+        // 2. 應用程式狀態管理 (支援 localStorage)
+        // ==========================================
+        const STORAGE_KEY = 'happy_classroom_grouping_v1';
+
+        let appState = {
+            startNum: 1,
+            endNum: 20,
+            groupSize: 4,
+            remainderMode: 'distribute', // 'distribute' | 'separate'
+            absentList: [],
+            groups: [], // [{ id, name, emoji, themeIndex, members: [1, 5...], score: 0 }]
+            soundEnabled: true,
+            settingsHidden: false
+        };
+
+        // 暫存互動狀態
+        let selectedSwapStudent = null; // { groupIndex, memberIndex, studentNum }
+        let isShuffling = false;
+        let pendingConfirmAction = null;
+
+        // ==========================================
+        // 3. Web Audio API 歡樂音效生成器 (無需外部音檔)
+        // ==========================================
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playTone(type) {
+            if (!appState.soundEnabled) return;
+            try {
+                initAudio();
+                if (!audioCtx) return;
+
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'plus') {
+                    // 輕快上揚雙音 (叮咚!)
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'bigPlus') {
+                    // 加多分歡呼和弦音效
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.07); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.14); // G5
+                    osc.frequency.setValueAtTime(1046.50, now + 0.21); // C6
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+                    osc.start(now);
+                    osc.stop(now + 0.45);
+                } else if (type === 'minus') {
+                    // 溫和下降音
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(392.00, now); // G4
+                    osc.frequency.linearRampToValueAtTime(293.66, now + 0.18); // D4
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+                    osc.start(now);
+                    osc.stop(now + 0.22);
+                } else if (type === 'tick') {
+                    // 抽籤轉動滴答聲
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(700 + Math.random() * 200, now);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.005, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'done') {
+                    // 分組完成大功告成音效
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(587.33, now); // D5
+                    osc.frequency.setValueAtTime(739.99, now + 0.1); // F#5
+                    osc.frequency.setValueAtTime(880.00, now + 0.2); // A5
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                    osc.start(now);
+                    osc.stop(now + 0.5);
+                } else if (type === 'swap') {
+                    // 交換座號音效
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(554.37, now + 0.08);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                }
+            } catch (e) {
+                console.warn('音效播放略過:', e);
+            }
+        }
+
+        // ==========================================
+        // 4. 初始化與資料持久化 (localStorage)
+        // ==========================================
+        window.onload = function () {
+            loadStateFromStorage();
+            syncInputsWithState();
+            updatePreviewSummary();
+
+            // 若無歷史分組資料，預設自動生成一次分組讓老師一打開就能看懂
+            if (!appState.groups || appState.groups.length === 0) {
+                generateGroupsData(false);
+            }
+
+            applySettingsVisibility();
+            updateSoundButtonUI();
+            renderGroups();
+        };
+
+        function saveStateToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                console.error('無法儲存至 localStorage:', e);
+            }
+        }
+
+        function loadStateFromStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    appState = { ...appState, ...parsed };
+                }
+            } catch (e) {
+                console.error('讀取 localStorage 失敗:', e);
+            }
+        }
+
+        function syncInputsWithState() {
+            document.getElementById('start-num').value = appState.startNum;
+            document.getElementById('end-num').value = appState.endNum;
+            document.getElementById('group-size').value = appState.groupSize;
+            document.getElementById('absent-input').value = appState.absentList.join(', ');
+
+            const radios = document.getElementsByName('remainder-mode');
+            for (const r of radios) {
+                r.checked = (r.value === appState.remainderMode);
+            }
+        }
+
+        // ==========================================
+        // 5. 設定面板計算與驗證邏輯
+        // ==========================================
+        function parseAbsentNumbers(inputStr, min, max) {
+            if (!inputStr || !inputStr.trim()) return [];
+            const tokens = inputStr.split(/[,，、\s]+/);
+            const set = new Set();
+            for (const t of tokens) {
+                const num = parseInt(t.trim(), 10);
+                if (!isNaN(num) && num >= min && num <= max) {
+                    set.add(num);
+                }
+            }
+            return Array.from(set).sort((a, b) => a - b);
+        }
+
+        function getActiveStudents() {
+            let start = parseInt(document.getElementById('start-num').value, 10) || 1;
+            let end = parseInt(document.getElementById('end-num').value, 10) || 1;
+            if (start > end) [start, end] = [end, start];
+
+            const absentInput = document.getElementById('absent-input').value;
+            const absentList = parseAbsentNumbers(absentInput, start, end);
+
+            const students = [];
+            for (let i = start; i <= end; i++) {
+                if (!absentList.includes(i)) {
+                    students.push(i);
+                }
+            }
+            return { start, end, absentList, students };
+        }
+
+        function adjustGroupSize(delta) {
+            const input = document.getElementById('group-size');
+            let val = parseInt(input.value, 10) || 4;
+            val = Math.max(1, Math.min(30, val + delta));
+            input.value = val;
+            updatePreviewSummary();
+        }
+
+        function updatePreviewSummary() {
+            const { students, absentList } = getActiveStudents();
+            const groupSize = Math.max(1, parseInt(document.getElementById('group-size').value, 10) || 4);
+            const modeEl = document.querySelector('input[name="remainder-mode"]:checked');
+            const mode = modeEl ? modeEl.value : 'distribute';
+
+            const total = students.length;
+            const summaryEl = document.getElementById('preview-summary');
+
+            if (total === 0) {
+                summaryEl.textContent = '⚠️ 目前沒有可分組的座號喔！';
+                return;
+            }
+
+            const fullGroups = Math.floor(total / groupSize);
+            const remainder = total % groupSize;
+
+            let text = `出席 ${total} 人`;
+            if (absentList.length > 0) {
+                text += ` (缺席 ${absentList.length} 人)`;
+            }
+
+            if (remainder === 0) {
+                text += ` ➔ 剛好分成 ${fullGroups} 組，每組 ${groupSize} 人`;
+            } else if (fullGroups === 0) {
+                text += ` ➔ 共 1 組 (${total} 人)`;
+            } else if (mode === 'distribute') {
+                text += ` ➔ 分成 ${fullGroups} 組 (其中 ${remainder} 組會多 1 人)`;
+            } else {
+                text += ` ➔ 分成 ${fullGroups + 1} 組 (最後 1 組為 ${remainder} 人)`;
+            }
+
+            summaryEl.textContent = text;
+        }
+
+        // ==========================================
+        // 6. 隨機洗牌演算法與動畫分組
+        // ==========================================
+        function shuffleArray(arr) {
+            const copy = [...arr];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy;
+        }
+
+        function generateGroupsData(preserveScores = false) {
+            const { start, end, absentList, students } = getActiveStudents();
+            const groupSize = Math.max(1, parseInt(document.getElementById('group-size').value, 10) || 4);
+            const modeEl = document.querySelector('input[name="remainder-mode"]:checked');
+            const remainderMode = modeEl ? modeEl.value : 'distribute';
+
+            if (students.length === 0) {
+                showToast('請至少保留 1 位學生座號才能分組喔！', 'warning');
+                return false;
+            }
+
+            // 儲存設定至狀態
+            appState.startNum = start;
+            appState.endNum = end;
+            appState.groupSize = groupSize;
+            appState.remainderMode = remainderMode;
+            appState.absentList = absentList;
+
+            // 洗牌學生座號
+            const shuffled = shuffleArray(students);
+            const total = shuffled.length;
+
+            // 計算組數
+            let numGroups = 1;
+            if (total <= groupSize) {
+                numGroups = 1;
+            } else if (remainderMode === 'distribute') {
+                numGroups = Math.floor(total / groupSize);
+            } else {
+                numGroups = Math.ceil(total / groupSize);
+            }
+
+            // 建立組別陣列
+            const buckets = Array.from({ length: numGroups }, () => []);
+
+            if (remainderMode === 'distribute' && total > groupSize) {
+                // 發牌式平均分配，確保每組人數差距最多為 1
+                shuffled.forEach((studentNum, idx) => {
+                    buckets[idx % numGroups].push(studentNum);
+                });
+            } else {
+                // 依序填滿每組，餘數自成最後一組
+                shuffled.forEach((studentNum, idx) => {
+                    const gIdx = Math.min(Math.floor(idx / groupSize), numGroups - 1);
+                    buckets[gIdx].push(studentNum);
+                });
+            }
+
+            // 各組內座號由小到大排序，方便小朋友尋找自己
+            buckets.forEach(b => b.sort((a, b) => a - b));
+
+            // 建立或保留組別名稱與分數
+            const oldGroups = appState.groups || [];
+            appState.groups = buckets.map((members, idx) => {
+                const themeIdx = idx % MACARON_THEMES.length;
+                const theme = MACARON_THEMES[themeIdx];
+                const existing = oldGroups[idx];
+
+                return {
+                    id: `group-${idx + 1}`,
+                    name: existing ? existing.name : `第 ${idx + 1} 組 (${theme.name})`,
+                    emoji: theme.emoji,
+                    themeIndex: themeIdx,
+                    members: members,
+                    score: (preserveScores && existing) ? existing.score : 0
+                };
+            });
+
+            cancelSwapSelection();
+            saveStateToStorage();
+            return true;
+        }
+
+        function startRandomGrouping() {
+            if (isShuffling) return;
+            const { students } = getActiveStudents();
+            if (students.length === 0) {
+                showToast('目前沒有出席的座號可以分組！', 'warning');
+                return;
+            }
+
+            isShuffling = true;
+            const btn = document.getElementById('shuffle-btn');
+            const btnText = document.getElementById('shuffle-btn-text');
+            btn.disabled = true;
+            btnText.textContent = '抽籤洗牌中...';
+
+            // 執行抽籤動畫 (快速跳動 8 次)
+            let step = 0;
+            const totalSteps = 8;
+            const interval = setInterval(() => {
+                generateGroupsData(true);
+                renderGroups(true);
+                playTone('tick');
+                step++;
+
+                if (step >= totalSteps) {
+                    clearInterval(interval);
+                    generateGroupsData(false); // 正式完成分組並將新分組分數歸零
+                    renderGroups(false);
+                    playTone('done');
+                    isShuffling = false;
+                    btn.disabled = false;
+                    btnText.textContent = '重新隨機分組';
+                    showToast('🎉 分組完成！大家快看看自己在哪一組吧！');
+                }
+            }, 95);
+        }
+
+        // ==========================================
+        // 7. 分組看板渲染與互動 (計分、改名、座號交換)
+        // ==========================================
+        function renderGroups(isAnimating = false) {
+            const container = document.getElementById('groups-container');
+            const totalBadge = document.getElementById('total-student-badge');
+
+            // 計算總出席人數與最高分
+            let totalStudents = 0;
+            let maxScore = -Infinity;
+            appState.groups.forEach(g => {
+                totalStudents += g.members.length;
+                if (g.score > maxScore) maxScore = g.score;
+            });
+
+            totalBadge.textContent = `共 ${totalStudents} 位小朋友 · ${appState.groups.length} 組`;
+            totalBadge.classList.remove('hidden');
+
+            // 根據組數動態調整網格欄位數，投影時更美觀
+            if (appState.groups.length <= 2) {
+                container.className = 'grid grid-cols-1 md:grid-cols-2 gap-6 pb-8';
+            } else if (appState.groups.length === 4) {
+                container.className = 'grid grid-cols-1 md:grid-cols-2 gap-6 pb-8';
+            } else {
+                container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pb-8';
+            }
+
+            container.innerHTML = '';
+
+            appState.groups.forEach((group, gIdx) => {
+                const theme = MACARON_THEMES[group.themeIndex % MACARON_THEMES.length];
+                // 最高分且大於 0 分才戴皇冠
+                const isLeader = (group.score > 0 && group.score === maxScore);
+
+                const card = document.createElement('div');
+                card.id = `card-${gIdx}`;
+                card.className = `relative rounded-3xl border-4 ${theme.cardBg} ${isLeader ? 'border-amber-400 ring-4 ring-amber-300/60 shadow-xl' : theme.border + ' shadow-md'} flex flex-col justify-between transition-all duration-300 ${isAnimating ? 'shuffling-card' : 'card-pop'}`;
+
+                // 皇冠徽章 (第一名專屬)
+                const crownHTML = isLeader ? `
+                    <div class="absolute -top-5 -right-3 bg-gradient-to-br from-amber-300 to-yellow-500 text-white w-12 h-12 rounded-2xl shadow-lg border-2 border-white flex items-center justify-center text-2xl crown-float z-20" title="目前最高分！">
+                        👑
+                    </div>
+                ` : '';
+
+                // 成員座號圓形徽章
+                const membersHTML = group.members.map((num, mIdx) => {
+                    const isSelected = selectedSwapStudent &&
+                        selectedSwapStudent.groupIndex === gIdx &&
+                        selectedSwapStudent.memberIndex === mIdx;
+
+                    return `
+                        <button type="button"
+                            onclick="handleStudentClick(${gIdx}, ${mIdx}, ${num})"
+                            title="點擊可與其他座號交換組別"
+                            class="w-14 h-14 sm:w-16 sm:h-16 rounded-full font-black text-2xl sm:text-3xl tabular-nums flex items-center justify-center border-4 shadow-sm transition-all active:scale-90 cursor-pointer
+                            ${isSelected
+                                ? 'bg-amber-400 text-slate-900 border-slate-900 scale-110 ring-4 ring-amber-300 animate-pulse'
+                                : `${theme.badgeBg} hover:scale-105 hover:shadow-md`}">
+                            ${num}
+                        </button>
+                    `;
+                }).join('');
+
+                card.innerHTML = `
+                    ${crownHTML}
+                    <!-- 卡片頂部：動物徽章與可編輯組名 -->
+                    <div class="${theme.headerBg} px-4 py-3 rounded-t-[20px] flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                            <span class="text-3xl sm:text-4xl bg-white/80 w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                                ${group.emoji}
+                            </span>
+                            <input type="text" value="${escapeHtml(group.name)}"
+                                onchange="renameGroup(${gIdx}, this.value)"
+                                aria-label="組別名稱"
+                                title="點擊可修改組別名稱"
+                                class="bg-transparent hover:bg-white/40 focus:bg-white px-2.5 py-1 rounded-xl font-black text-lg sm:text-xl ${theme.headerText} focus:text-slate-900 w-full truncate focus:outline-none transition">
+                        </div>
+                        <span class="text-xs sm:text-sm font-black bg-white/80 ${theme.headerText} px-2.5 py-1 rounded-xl shrink-0">
+                            ${group.members.length} 人
+                        </span>
+                    </div>
+
+                    <!-- 卡片中間：座號徽章區 -->
+                    <div class="p-4 sm:p-5 flex-1 flex flex-col justify-center">
+                        <div class="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
+                            ${membersHTML}
+                        </div>
+                    </div>
+
+                    <!-- 卡片底部：醒目計分看板與加減分按鈕 -->
+                    <div class="p-3 sm:p-4 pt-0">
+                        <div class="${theme.scoreBox} rounded-2xl border-2 p-3 relative overflow-visible">
+                            <div class="flex items-center justify-between mb-2.5 px-1">
+                                <span class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                    <i class="fa-solid fa-trophy text-amber-500"></i> 小組得分
+                                </span>
+                                <div id="score-display-${gIdx}" class="text-4xl sm:text-5xl font-black tabular-nums ${theme.scoreText} tracking-tight">
+                                    ${group.score}
+                                </div>
+                            </div>
+
+                            <!-- 快速加減分按鈕列 -->
+                            <div class="grid grid-cols-4 gap-1.5 sm:gap-2">
+                                <button type="button" onclick="updateGroupScore(${gIdx}, -1, event)"
+                                    class="py-2 sm:py-2.5 rounded-xl bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-black text-base sm:text-lg border-b-4 border-slate-300 hover:border-rose-300 active:scale-95 transition">
+                                    -1
+                                </button>
+                                <button type="button" onclick="updateGroupScore(${gIdx}, 1, event)"
+                                    class="py-2 sm:py-2.5 rounded-xl bg-emerald-400 hover:bg-emerald-500 text-white font-black text-base sm:text-lg border-b-4 border-emerald-600 active:scale-95 transition shadow-sm">
+                                    +1
+                                </button>
+                                <button type="button" onclick="updateGroupScore(${gIdx}, 2, event)"
+                                    class="py-2 sm:py-2.5 rounded-xl bg-sky-400 hover:bg-sky-500 text-white font-black text-base sm:text-lg border-b-4 border-sky-600 active:scale-95 transition shadow-sm">
+                                    +2
+                                </button>
+                                <button type="button" onclick="updateGroupScore(${gIdx}, 5, event)"
+                                    class="py-2 sm:py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-base sm:text-lg border-b-4 border-amber-600 active:scale-95 transition shadow-sm">
+                                    +5
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        // 修改組名
+        function renameGroup(groupIndex, newName) {
+            const trimmed = newName.trim();
+            if (trimmed) {
+                appState.groups[groupIndex].name = trimmed;
+                saveStateToStorage();
+            } else {
+                renderGroups();
+            }
+        }
+
+        // ==========================================
+        // 8. 計分邏輯與視覺/音效回饋
+        // ==========================================
+        function updateGroupScore(groupIndex, delta, event) {
+            const group = appState.groups[groupIndex];
+            if (!group) return;
+
+            group.score += delta;
+            saveStateToStorage();
+
+            // 播放對應音效
+            if (delta >= 2) {
+                playTone('bigPlus');
+            } else if (delta > 0) {
+                playTone('plus');
+            } else {
+                playTone('minus');
+            }
+
+            // 重新渲染以更新皇冠第一名狀態
+            renderGroups();
+
+            // 觸發分數跳動與漂浮加減分數字動畫
+            const scoreEl = document.getElementById(`score-display-${groupIndex}`);
+            if (scoreEl) {
+                scoreEl.classList.remove('score-bump');
+                void scoreEl.offsetWidth; // 強制重繪
+                scoreEl.classList.add('score-bump');
+
+                const floater = document.createElement('span');
+                floater.className = `floating-delta ${delta > 0 ? 'text-emerald-600' : 'text-rose-500'}`;
+                floater.textContent = delta > 0 ? `+${delta}` : `${delta}`;
+                floater.style.right = '12px';
+                floater.style.top = '-10px';
+                scoreEl.parentElement.appendChild(floater);
+                setTimeout(() => floater.remove(), 800);
+            }
+        }
+
+        function addAllGroupsScore(delta) {
+            if (!appState.groups || appState.groups.length === 0) return;
+            appState.groups.forEach(g => {
+                g.score += delta;
+            });
+            saveStateToStorage();
+            playTone('bigPlus');
+            renderGroups();
+            showToast(`🌟 太棒了！全班每一組都 +${delta} 分！`);
+        }
+
+        // ==========================================
+        // 9. 手動微調：點擊兩個座號互換組別
+        // ==========================================
+        function handleStudentClick(groupIndex, memberIndex, studentNum) {
+            if (isShuffling) return;
+
+            // 若尚未選取第一位學生
+            if (!selectedSwapStudent) {
+                selectedSwapStudent = { groupIndex, memberIndex, studentNum };
+                playTone('tick');
+                const banner = document.getElementById('swap-banner');
+                const bannerText = document.getElementById('swap-banner-text');
+                bannerText.textContent = `已選取「${studentNum} 號」，請點擊另一位小朋友的座號來交換組別！`;
+                banner.classList.remove('hidden');
+                renderGroups();
+                return;
+            }
+
+            // 若點擊同一位學生，則取消選取
+            if (selectedSwapStudent.groupIndex === groupIndex && selectedSwapStudent.memberIndex === memberIndex) {
+                cancelSwapSelection();
+                return;
+            }
+
+            // 執行兩位學生座號互換
+            const first = selectedSwapStudent;
+            const groupA = appState.groups[first.groupIndex];
+            const groupB = appState.groups[groupIndex];
+
+            const numA = groupA.members[first.memberIndex];
+            const numB = groupB.members[memberIndex];
+
+            groupA.members[first.memberIndex] = numB;
+            groupB.members[memberIndex] = numA;
+
+            // 交換後重新依座號大小排序
+            groupA.members.sort((a, b) => a - b);
+            groupB.members.sort((a, b) => a - b);
+
+            cancelSwapSelection();
+            saveStateToStorage();
+            playTone('swap');
+            renderGroups();
+            showToast(`🔄 已將 ${numA} 號與 ${numB} 號交換位置！`);
+        }
+
+        function cancelSwapSelection() {
+            selectedSwapStudent = null;
+            document.getElementById('swap-banner').classList.add('hidden');
+            renderGroups();
+        }
+
+        // ==========================================
+        // 10. 缺席座號點選彈窗 (Modal)
+        // ==========================================
+        function openAbsentPicker() {
+            let start = parseInt(document.getElementById('start-num').value, 10) || 1;
+            let end = parseInt(document.getElementById('end-num').value, 10) || 20;
+            if (start > end) [start, end] = [end, start];
+
+            const currentAbsent = parseAbsentNumbers(document.getElementById('absent-input').value, start, end);
+            const grid = document.getElementById('absent-grid');
+            grid.innerHTML = '';
+
+            for (let i = start; i <= end; i++) {
+                const isAbsent = currentAbsent.includes(i);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = i;
+                btn.dataset.num = i;
+                btn.className = isAbsent
+                    ? 'py-2.5 rounded-xl font-black text-lg bg-rose-500 text-white border-2 border-rose-700 shadow-inner transition'
+                    : 'py-2.5 rounded-xl font-black text-lg bg-white text-slate-700 border-2 border-purple-200 hover:bg-purple-100 transition';
+
+                btn.onclick = function () {
+                    toggleAbsentNumberInModal(i, btn);
+                };
+                grid.appendChild(btn);
+            }
+
+            const modal = document.getElementById('absent-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function toggleAbsentNumberInModal(num, btnEl) {
+            let start = parseInt(document.getElementById('start-num').value, 10) || 1;
+            let end = parseInt(document.getElementById('end-num').value, 10) || 20;
+            if (start > end) [start, end] = [end, start];
+
+            let list = parseAbsentNumbers(document.getElementById('absent-input').value, start, end);
+            if (list.includes(num)) {
+                list = list.filter(n => n !== num);
+                btnEl.className = 'py-2.5 rounded-xl font-black text-lg bg-white text-slate-700 border-2 border-purple-200 hover:bg-purple-100 transition';
+            } else {
+                list.push(num);
+                list.sort((a, b) => a - b);
+                btnEl.className = 'py-2.5 rounded-xl font-black text-lg bg-rose-500 text-white border-2 border-rose-700 shadow-inner transition';
+            }
+            document.getElementById('absent-input').value = list.join(', ');
+            updatePreviewSummary();
+        }
+
+        function clearAbsentSelection() {
+            document.getElementById('absent-input').value = '';
+            updatePreviewSummary();
+            openAbsentPicker();
+        }
+
+        function closeAbsentPicker() {
+            const modal = document.getElementById('absent-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // ==========================================
+        // 11. 投影模式切換、音效開關與確認對話框
+        // ==========================================
+        function toggleSettingsPanel() {
+            appState.settingsHidden = !appState.settingsHidden;
+            saveStateToStorage();
+            applySettingsVisibility();
+        }
+
+        function applySettingsVisibility() {
+            const panel = document.getElementById('settings-panel');
+            const icon = document.getElementById('settings-toggle-icon');
+            const text = document.getElementById('settings-toggle-text');
+
+            if (appState.settingsHidden) {
+                panel.classList.add('hidden');
+                icon.className = 'fa-solid fa-eye';
+                text.textContent = '展開分組設定';
+            } else {
+                panel.classList.remove('hidden');
+                icon.className = 'fa-solid fa-eye-slash';
+                text.textContent = '投影模式 (隱藏設定)';
+            }
+        }
+
+        function toggleSound() {
+            appState.soundEnabled = !appState.soundEnabled;
+            saveStateToStorage();
+            updateSoundButtonUI();
+            if (appState.soundEnabled) {
+                playTone('plus');
+                showToast('🔊 已開啟計分音效');
+            } else {
+                showToast('🔇 已關閉計分音效');
+            }
+        }
+
+        function updateSoundButtonUI() {
+            const icon = document.getElementById('sound-icon');
+            const btn = document.getElementById('sound-toggle-btn');
+            if (appState.soundEnabled) {
+                icon.className = 'fa-solid fa-volume-high';
+                btn.classList.remove('opacity-60');
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark';
+                btn.classList.add('opacity-60');
+            }
+        }
+
+        // 防誤觸確認對話框
+        function confirmAction(actionType) {
+            pendingConfirmAction = actionType;
+            const modal = document.getElementById('confirm-modal');
+            const title = document.getElementById('confirm-title');
+            const desc = document.getElementById('confirm-desc');
+            const yesBtn = document.getElementById('confirm-yes-btn');
+
+            if (actionType === 'resetScores') {
+                title.textContent = '確定要將所有分數歸零嗎？';
+                desc.textContent = '目前的分組名單會保留，只有分數會重新從 0 分開始計算。';
+                yesBtn.textContent = '確定歸零';
+                yesBtn.onclick = executeResetScores;
+            } else if (actionType === 'resetAll') {
+                title.textContent = '確定要重置全部設定嗎？';
+                desc.textContent = '座號範圍、缺席名單、組別名稱與分數都會恢復成預設值喔！';
+                yesBtn.textContent = '確定重置';
+                yesBtn.onclick = executeResetAll;
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            pendingConfirmAction = null;
+        }
+
+        function executeResetScores() {
+            appState.groups.forEach(g => g.score = 0);
+            saveStateToStorage();
+            renderGroups();
+            closeConfirmModal();
+            playTone('minus');
+            showToast('🔄 所有小組分數已歸零！');
+        }
+
+        function executeResetAll() {
+            localStorage.removeItem(STORAGE_KEY);
+            appState = {
+                startNum: 1,
+                endNum: 20,
+                groupSize: 4,
+                remainderMode: 'distribute',
+                absentList: [],
+                groups: [],
+                soundEnabled: appState.soundEnabled,
+                settingsHidden: false
+            };
+            syncInputsWithState();
+            updatePreviewSummary();
+            generateGroupsData(false);
+            applySettingsVisibility();
+            renderGroups();
+            closeConfirmModal();
+            showToast('✨ 已恢復成預設設定！');
+        }
+
+        // ==========================================
+        // 12. 工具函式：Toast 提示與 HTML 跳脫
+        // ==========================================
+        let toastTimer = null;
+        function showToast(message, type = 'success') {
+            const box = document.getElementById('toast-box');
+            const msg = document.getElementById('toast-msg');
+            const icon = document.getElementById('toast-icon');
+
+            msg.textContent = message;
+            if (type === 'warning') {
+                icon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+            } else {
+                icon.className = 'fa-solid fa-circle-check text-emerald-400';
+            }
+
+            box.classList.remove('opacity-0', 'translate-y-4');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                box.classList.add('opacity-0', 'translate-y-4');
+            }, 2600);
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+    </script>
+</body>
+</html>
